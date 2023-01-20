@@ -158,24 +158,18 @@ library SafeMath {
 }
 //libraries
 struct User {
-    uint256 startDate;
-    uint256 divs;
-    uint256 refBonus;
-    uint256 totalInits;
-    uint256 totalWithRefBonus;
-    uint256 totalAccrued;
-    uint256 lastWith;
-    uint256 timesCmpd;
+    uint256 totalDeposit;
+    uint256 totalAccured;
     address referrer;
-    uint256 keyCounter;
+    uint256 refBonus;
+    uint256 totalWithRefBonus;
     Depo [] depoList;
 }
 
 struct Depo {
-    uint256 key;
-    uint256 depoTime;
-    uint256 finishTime;
     uint256 level;
+    uint256 totalEarned;
+    uint256 lastWithdraw;
     bool    done;
 }
 
@@ -188,7 +182,7 @@ struct Main {
 
 struct LunarHop {
     string name;
-    uint256 daysInSeconds; // updated to be in seconds
+    uint256 lifeSpan; // updated to be in seconds
     uint256 dailyProfit;
     uint256 price;
     uint256 totalIncome;
@@ -200,30 +194,32 @@ contract LunarHopMiner {
   	uint256 constant hardDays = 86400;
     uint256 constant PERCENTS_DIVIDER = 1000;
     uint256 refPercentage = 100;
-    uint256 TEAM_FEE = 100;
-    mapping (address => mapping(uint256 => Depo)) public DeposMap;
-    mapping (address => User) public Users;
+    uint256 DEPOSIT_FEE = 100;
+    uint256 WITHDRAW_FEE = 50;
+    // mapping (address => mapping(uint256 => Depo)) public DeposMap;
+    mapping (address => User) internal Users;
     mapping (uint256 => LunarHop) public LunarHopGroup;
     mapping (uint256 => Main) public MainKey;
-    mapping (address => bool) public Investors;
+
     using SafeERC20 for IERC20;
     IERC20 public BUSD;
     address public CEO;
     address public dev;
 
-    constructor() {
-            CEO = address(0x0B61278fcc44fB76bbDb753aB6D52804F085dfea);
-            dev = address(0x0B61278fcc44fB76bbDb753aB6D52804F085dfea);
-            //LunarHop NFT Info:          name          life span    daily roi        price         totalIncome
-            LunarHopGroup[0] = LunarHop('Common',       30 days, 2   * 10 ** 18, 50    * 10 ** 18, 60    * 10 ** 18);
-            LunarHopGroup[1] = LunarHop('Uncommon',     30 days, 42  * 10 ** 17, 100   * 10 ** 18, 126   * 10 ** 18);
-            LunarHopGroup[2] = LunarHop('Rare',         45 days, 22  * 10 ** 18, 500   * 10 ** 18, 990   * 10 ** 18);
-            LunarHopGroup[3] = LunarHop('Super Rare',   45 days, 45  * 10 ** 18, 1000  * 10 ** 18, 2025  * 10 ** 18);
-            LunarHopGroup[4] = LunarHop('Legendary',    60 days, 235 * 10 ** 18, 5000  * 10 ** 18, 14100 * 10 ** 18);
-            LunarHopGroup[5] = LunarHop('Mytical',      60 days, 480 * 10 ** 18, 10000 * 10 ** 18, 28800 * 10 ** 18);
+    constructor(address _busd, address _ceo, address _dev) {
+            CEO = _ceo;
+            dev = _dev;
+            //LunarHop NFT Info:          name          life span       daily roi              price           totalIncome
+            LunarHopGroup[0] = LunarHop('Common',       30 days,       2 * 10 ** 18,       50 * 10 ** 18,      60 * 10 ** 18);
+            LunarHopGroup[1] = LunarHop('Uncommon',     30 days,      42 * 10 ** 17,      100 * 10 ** 18,     126 * 10 ** 18);
+            LunarHopGroup[2] = LunarHop('Rare',         45 days,      22 * 10 ** 18,      500 * 10 ** 18,     990 * 10 ** 18);
+            LunarHopGroup[3] = LunarHop('Super Rare',   45 days,      45 * 10 ** 18,     1000 * 10 ** 18,    2025 * 10 ** 18);
+            LunarHopGroup[4] = LunarHop('Legendary',    60 days,     235 * 10 ** 18,     5000 * 10 ** 18,   14100 * 10 ** 18);
+            LunarHopGroup[5] = LunarHop('Mytical',      60 days,     480 * 10 ** 18,    10000 * 10 ** 18,   28800 * 10 ** 18);
             
             // BUSD = IERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56); 
-            BUSD = IERC20(0xfB299533C9402B3CcF3d0743F4000c1AA2C26Ae0); 
+            // BUSD = IERC20(0xfB299533C9402B3CcF3d0743F4000c1AA2C26Ae0); 
+            BUSD = IERC20(_busd);
     }
 
     function fundContract(uint256 _amount) external {
@@ -239,15 +235,13 @@ contract LunarHopMiner {
 
         User storage user = Users[msg.sender];
         Main storage main = MainKey[1];
-        if (user.lastWith == 0) {
-            user.lastWith = block.timestamp;
-            user.startDate = block.timestamp;
-        }
 
-        uint256 teamFee = amount.mul(TEAM_FEE).div(PERCENTS_DIVIDER);
-
+        uint256 depositFee = amount.mul(DEPOSIT_FEE).div(PERCENTS_DIVIDER);
+        BUSD.safeTransfer(CEO, depositFee / 2);
+        BUSD.safeTransfer(dev, depositFee / 2);
+        
         if (user.referrer == address(0)) {
-			if (Investors[_referrer] == true && _referrer != msg.sender) {
+			if (Users[_referrer].totalDeposit > 0 && _referrer != msg.sender) {
 				user.referrer = _referrer;
 			}
 		}
@@ -260,91 +254,81 @@ contract LunarHopMiner {
             Users[dev].refBonus = Users[dev].refBonus + refAmount;
 		}
 
-        user.totalInits += amount; //adjustedAmt
-
-        user.depoList.push(Depo({
-            key: user.depoList.length,
-            depoTime: block.timestamp,
-            finishTime: block.timestamp + LunarHopGroup[_level].daysInSeconds,
-            level: _level,
-            done: false
-        }));
-
-        // user.keyCounter += 1;
-        // main.ovrTotalDeps += amount;
-        if (Investors[msg.sender] == false) {
-            Investors[msg.sender] = true;
+        if (user.totalDeposit == 0) {
             main.users += 1;
         }
+        user.totalDeposit += amount;
 
-        BUSD.safeTransfer(CEO, teamFee/2);
-        BUSD.safeTransfer(dev, teamFee/2);
-    }
-
-    function claimRewards(address _account, uint256 _no) external {
-        User storage user = Users[_account];
-        Main storage main = MainKey[1];
-        // uint256 x = calcdiv(_account);
-        // x = min(getBalance(), x);
-        require(user.depoList[_no].done == false, "Already claimed!");
-        require(user.depoList[_no].finishTime < block.timestamp, "Not claimable, yet");
-        user.depoList[_no].done = true;
-        uint256 level = user.depoList[_no].level;
-        uint256 rewards = LunarHopGroup[level].totalIncome;
-        // uint256 elapsedTime = user.depoList[i].finishTime - user.depoList[i].depoTime;
-        // uint256 level = user.depoList[i].level;
-        // uint256 dailyReturn = LunarHopGroup[level].dailyProfit;
-        // uint256 currentReturn = dailyReturn.mul(elapsedTime).div(1 days);
-        if (rewards > getBalance()) {
-            rewards = getBalance();
-        }
-        uint256 withdrawFee = rewards.mul(TEAM_FEE).div(PERCENTS_DIVIDER);
-        rewards = rewards - withdrawFee;
-
-        main.ovrTotalWiths += rewards;
-        user.totalAccrued += rewards;
-        user.lastWith = block.timestamp;
-
-        BUSD.safeTransfer(dev, withdrawFee/2);
-        BUSD.safeTransfer(CEO, withdrawFee/2);
-        BUSD.safeTransfer(_account, rewards);
-    }
-    
-    function buyAgain(address _account, uint256 _no) external {
-        User storage user = Users[_account];
-        Main storage main = MainKey[1];
-        require(user.depoList[_no].done == false, "Already claimed!");
-        require(user.depoList[_no].finishTime < block.timestamp, "Not claimable, yet");
-        user.depoList[_no].done = true;
-        uint256 level = user.depoList[_no].level;
-        uint256 rewards = LunarHopGroup[level].totalIncome;
-        uint256 price = LunarHopGroup[level].price;
-        BUSD.safeTransfer(_account, rewards - price);
-        // uint256 elapsedTime = user.depoList[i].finishTime - user.depoList[i].depoTime;
-        // uint256 level = user.depoList[i].level;
-        // uint256 dailyReturn = LunarHopGroup[level].dailyProfit;
-        // uint256 currentReturn = dailyReturn.mul(elapsedTime).div(1 days);
         user.depoList.push(Depo({
-            key: user.depoList.length,
-            depoTime: block.timestamp,
-            finishTime: block.timestamp + LunarHopGroup[level].daysInSeconds,
-            level: level,
+            level: _level,
+            totalEarned: 0,
+            lastWithdraw: block.timestamp,
             done: false
         }));
+    }
 
+    function claimRewards(uint256 _no) external {
+        User storage user = Users[msg.sender];
+        
+        require(user.depoList.length > _no, "Invalid param");
+        require(user.depoList[_no].done == false, "Already claimed!");
+        require(user.depoList[_no].lastWithdraw + 1 days < block.timestamp, "Not claimable, yet");
+        
+        uint256 _level = user.depoList[_no].level;
+        uint256 _totalIncome = LunarHopGroup[_level].totalIncome;
+        uint256 dailyROI = LunarHopGroup[_level].dailyProfit;
+        uint256 rewards = (block.timestamp - user.depoList[_no].lastWithdraw) * dailyROI / 1 days;
+        rewards = min(rewards, _totalIncome - user.depoList[_no].totalEarned);
         if (rewards > getBalance()) {
             rewards = getBalance();
         }
-        uint256 withdrawFee = rewards.mul(TEAM_FEE).div(PERCENTS_DIVIDER);
-        rewards = rewards - withdrawFee;
 
-        main.ovrTotalWiths += rewards;
-        user.totalAccrued += rewards;
-        user.lastWith = block.timestamp;
+        user.totalAccured += rewards;
+        user.depoList[_no].totalEarned += rewards;
+        user.depoList[_no].lastWithdraw = block.timestamp;
+        if (user.depoList[_no].totalEarned ==  _totalIncome) {
+            user.depoList[_no].done = true;
+        }
+
+        uint256 withdrawFee = rewards.mul(WITHDRAW_FEE).div(PERCENTS_DIVIDER);
+        rewards = rewards - withdrawFee;
 
         BUSD.safeTransfer(dev, withdrawFee/2);
         BUSD.safeTransfer(CEO, withdrawFee/2);
-        BUSD.safeTransfer(_account, rewards);
+        BUSD.safeTransfer(msg.sender, rewards);
+    }
+    
+    function buyAgain(uint256 _no) external {
+        User storage user = Users[msg.sender];
+        
+        require(user.depoList.length > _no, "Invalid param");
+        require(user.depoList[_no].done == false, "Already claimed!");
+        require(user.depoList[_no].lastWithdraw + 1 days < block.timestamp, "Not claimable, yet");
+        
+        uint256 _level = user.depoList[_no].level;
+        uint256 _totalIncome = LunarHopGroup[_level].totalIncome;
+        uint256 dailyROI = LunarHopGroup[_level].dailyProfit;
+        uint256 rewards = (block.timestamp - user.depoList[_no].lastWithdraw) * dailyROI / 1 days;
+        rewards = min(rewards, _totalIncome - user.depoList[_no].totalEarned);
+
+        require(rewards >= LunarHopGroup[_level].price, "Reward is not enough to buy new NFT, yet!");
+        user.totalAccured += rewards;
+        user.depoList[_no].totalEarned += rewards;
+        user.depoList[_no].lastWithdraw = block.timestamp;
+        if (user.depoList[_no].totalEarned ==  _totalIncome) {
+            user.depoList[_no].done = true;
+        }
+
+        BUSD.safeTransfer(msg.sender, rewards - LunarHopGroup[_level].price);
+
+        user.totalDeposit += LunarHopGroup[_level].price;
+
+        user.depoList.push(Depo({
+            level: _level,
+            totalEarned: 0,
+            lastWithdraw: block.timestamp,
+            done: false
+        }));
     }
 
     function userInfo() view external returns (Depo [] memory depoList) {
@@ -362,26 +346,25 @@ contract LunarHopMiner {
         BUSD.safeTransfer(msg.sender, amtz);
     }
 
-
-
-    function calcdiv(address dy) public view returns (uint256) {
-        User storage user = Users[dy];
+    function getTotalRewards(address _account) public view returns (uint256) {
+        User storage user = Users[_account];
 
         uint256 with;
         for (uint256 i = 0; i < user.depoList.length; i++){
             if (user.depoList[i].done == false) {
-                uint256 elapsedTime = min(block.timestamp, user.depoList[i].finishTime).sub(user.depoList[i].depoTime);
-                uint256 level = user.depoList[i].level;
-                uint256 dailyReturn = LunarHopGroup[level].dailyProfit;
-                uint256 currentReturn = dailyReturn.mul(elapsedTime).div(1 days);
-                with += currentReturn;
+                uint256 _level = user.depoList[i].level;
+                uint256 _totalIncome = LunarHopGroup[_level].totalIncome;
+                uint256 dailyROI = LunarHopGroup[_level].dailyProfit;
+                uint256 rewards = (block.timestamp - user.depoList[i].lastWithdraw) * dailyROI / 1 days;
+                rewards = min(rewards, _totalIncome - user.depoList[i].totalEarned);
+                with += rewards;
             }
         }
 
         return with;
     }
 
-    function changeOwner(address _account) external {
+    function changeDEV(address _account) external {
         require(msg.sender == dev, "Only dev is accessable");
         dev = _account;
     }
@@ -401,5 +384,31 @@ contract LunarHopMiner {
 
     function getBalance() public view returns (uint256) {
         return BUSD.balanceOf(address(this));
+    }
+
+    function getUserInfo() public view returns(uint256 totalDeposit, uint256 totalAccured, 
+                            address referrer, uint256 refBonus, uint256 totalWithRefBonus, uint256 totalDepositCnt) {
+        User storage user = Users[msg.sender];
+        return (
+            user.totalDeposit,
+            user.totalAccured,
+            user.referrer,
+            user.refBonus,
+            user.totalWithRefBonus,
+            user.depoList.length
+        );
+    }
+
+    function getUserDepositInfo(address _account, uint256 _no) public view returns(uint256 level, 
+                                uint256 totalEarned, uint256 lastWithdraw, bool done) {
+        User storage user = Users[_account];
+        require(_no < user.depoList.length, "Invalid param!");
+
+        return (
+            user.depoList[_no].level,
+            user.depoList[_no].totalEarned,
+            user.depoList[_no].lastWithdraw,
+            user.depoList[_no].done
+        );
     }
 }
