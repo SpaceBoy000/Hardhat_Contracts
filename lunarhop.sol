@@ -268,6 +268,8 @@ contract LunarHopMiner {
     }
 
     function claimRewards(uint256 _no) external {
+        require(block.timestamp >= launch, "App did not launch yet.");
+
         User storage user = Users[msg.sender];
         
         require(user.depoList.length > _no, "Invalid param");
@@ -299,6 +301,8 @@ contract LunarHopMiner {
     }
     
     function buyAgain(uint256 _no) external {
+        require(block.timestamp >= launch, "App did not launch yet.");
+
         User storage user = Users[msg.sender];
         
         require(user.depoList.length > _no, "Invalid param");
@@ -330,6 +334,38 @@ contract LunarHopMiner {
             done: false
         }));
     }
+
+    function sellLunarHop(uint256 _no) external {
+        require(block.timestamp >= launch, "App did not launch yet.");
+        
+        User storage user = Users[msg.sender];
+        
+        require(user.depoList.length > _no, "Invalid param");
+        require(user.depoList[_no].done == false, "Already claimed!");
+        require(user.depoList[_no].lastWithdraw + 1 days < block.timestamp, "Not claimable, yet");
+
+        uint256 _level = user.depoList[_no].level;
+        uint256 _price = LunarHopGroup[_level].price;
+        
+        require(_price > user.depoList[_no].totalEarned, "Could not sell, anymore!");
+        uint256 leftPayment = (_price - user.depoList[_no].totalEarned) / 2;
+
+        if (leftPayment > getBalance()) {
+            leftPayment = getBalance();
+        }
+
+        user.totalAccured += leftPayment;
+        user.depoList[_no].totalEarned += leftPayment;
+        user.depoList[_no].lastWithdraw = block.timestamp;
+        user.depoList[_no].done = true;
+
+        uint256 withdrawFee = leftPayment.mul(WITHDRAW_FEE).div(PERCENTS_DIVIDER);
+        leftPayment = leftPayment - withdrawFee;
+
+        BUSD.safeTransfer(dev, withdrawFee/2);
+        BUSD.safeTransfer(CEO, withdrawFee/2);
+        BUSD.safeTransfer(msg.sender, leftPayment);
+	}
 
     function userInfo() view external returns (Depo [] memory depoList) {
         User storage user = Users[msg.sender];
