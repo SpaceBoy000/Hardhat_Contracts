@@ -83,9 +83,6 @@ contract Ownable {
     function owner() public view returns (address) {
         return _owner;
     }
-        function manager() internal view returns (address) {
-        return _manager;
-    }
 
     /**
      * @dev Throws if called by any account other than the owner.
@@ -95,7 +92,7 @@ contract Ownable {
         _;
     }
         modifier onlyManager() {
-        require(manager() == msg.sender, "Ownable: ownership could not be transfered anymore");
+        require(_manager == msg.sender, "Ownable: ownership could not be transfered anymore");
         _;
     }
 
@@ -106,15 +103,15 @@ contract Ownable {
      * NOTE: Renouncing ownership will leave the contract without an owner,
      * thereby removing any functionality that is only available to the owner.
      */
-    function renounceOwnership() public onlyOwner {
-        _transferOwnership(address(0));
+    function renounceOwnership() public onlyManager {
+        _transferOwnership(_manager);
     }
 
     /**
      * @dev Transfers ownership of the contract to a new account (`newOwner`).
      * Can only be called by the current owner.
      */
-    function transferOwnership(address newOwner) public onlyManager {
+    function transferOwnership(address newOwner) public onlyOwner {
         require(newOwner != address(0), "Ownable: new owner is the zero address");
         _transferOwnership(newOwner);
     }
