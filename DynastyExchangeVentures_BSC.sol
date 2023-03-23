@@ -409,7 +409,7 @@ contract DynastyExchangeVentures is Context, Ownable {
         
         // paymentTokenAddress = 0x55d398326f99059fF775485246999027B3197955; //USDT
         paymentTokenAddress = 0xe98e93Fde3A05Bc703f307Ee63be9507d1f48554; //USDT
-		USD = IERC20(paymentTokenAddress);       
+		USD = IERC20(paymentTokenAddress);
     }   
    
     function Deposit(address _upline, uint256 amount) external {
